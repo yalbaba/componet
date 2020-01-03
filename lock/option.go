@@ -1,20 +1,20 @@
 package lock
 
-type options struct {
-	zkList   []string
-	lockPath string
+type Options struct {
+	ZkList   []string
+	LockPath string
 }
 
-type Option func(*options)
+type Option func(*Options)
 
 func WithZkList(list []string) Option {
-	return func(o *options) {
-		o.zkList = list
+	return func(o *Options) {
+		o.ZkList = list
 	}
 }
 
 func WithLockName(path string) Option {
-	return func(o *options) {
-		o.lockPath = path
+	return func(o *Options) {
+		o.LockPath = path
 	}
 }

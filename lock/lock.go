@@ -1,109 +1,38 @@
 package lock
 
-import (
-	"fmt"
-	"sort"
-	"sync"
-	"time"
-	"zklock/util"
-
-	"github.com/samuel/go-zookeeper/zk"
-)
+import "fmt"
 
 const EPHEMERAL_SEQUENTIAL = 3
 
-type Lock interface {
+var lockResolvers map[string]LockResolver
+
+type LockServer interface {
 	TryLock() (bool, error)
-	Lock()
-	WaitForLock()
+	Lock() (bool, error)
+	WaitLock(last string) (bool, error)
 	UnLock()
 }
 
-type ZkLock struct {
-	ZkList   []string
-	LockPath string
-	c        *zk.Conn
+//根据名称获取锁对象
+func GetLockServer(proto string, opts ...Option) (LockServer, error) {
+	resolver, ok := lockResolvers[proto]
+	if !ok {
+		fmt.Errorf("没有适配器")
+	}
+	return resolver.Resolve(opts...), nil
 }
 
-func NewLock(opt ...Option) *ZkLock {
-	optConf := &options{}
-	for _, o := range opt {
-		o(optConf)
-	}
-	lock := &ZkLock{
-		ZkList:   optConf.zkList,
-		LockPath: optConf.lockPath,
-	}
-	if lock.LockPath == "" {
-		lock.LockPath = "/my_lock"
-	}
-
-	conn, _, err := zk.Connect(lock.ZkList, 10*time.Second)
-	if err != nil {
-		fmt.Errorf("连接错误%v", err)
-	}
-	lock.c = conn
-	return lock
+type LockResolver interface {
+	Resolve(opts ...Option) LockServer
 }
 
-func (n *ZkLock) TryLock() (bool, error) {
-	fmt.Println("开始尝试获取分布式锁--------------")
-	exist, _, err := n.c.Exists(fmt.Sprintf("/%s", n.LockPath))
-	if err != nil {
-		return false, fmt.Errorf("检查节点是否存在失败,err:%v", err)
+func RegisteLockResolver(proto string, resolver LockResolver) error {
+	if resolver == nil {
+		fmt.Errorf("注入的适配器不可为空")
 	}
-	if !exist {
-		n.c.Create(fmt.Sprintf("/%s", n.LockPath), []byte("locked"), 0, zk.WorldACL(zk.PermAll))
+	if _, ok := lockResolvers[proto]; ok {
+		fmt.Errorf("该适配器已经注入")
 	}
-	// 创建当前锁节点
-	currentNode, err := n.c.Create(fmt.Sprintf("/%s/locked", n.LockPath), []byte("locked"), EPHEMERAL_SEQUENTIAL, zk.WorldACL(zk.PermAll))
-	if err != nil {
-		return false, fmt.Errorf("创建节点失败,err:%v", err)
-	}
-	//获取所有子节点
-	childrens, _, err := n.c.Children(fmt.Sprintf("/%s", n.LockPath))
-	if err != nil {
-		return false, fmt.Errorf("获取所有子节点失败，err:%v", err)
-	}
-	sort.Sort((sort.StringSlice(childrens)))
-	if currentNode == childrens[0] {
-		//节点最小，上锁成功
-		return true, nil
-	}
-	//获取上一个节点名
-	lastNode := childrens[util.IndexOf(childrens, currentNode)-1]
-	return n.waitLock(lastNode)
-}
-
-// 上锁
-func (n *ZkLock) Lock() (bool, error) {
-	isLock, err := n.TryLock()
-	if err != nil {
-		return false, err
-	}
-	if isLock {
-		return true, nil
-	}
-	return false, nil
-}
-
-//等待锁
-func (n *ZkLock) waitLock(last string) (bool, error) {
-	var wg sync.WaitGroup
-	wg.Add(1)
-	option := zk.WithEventCallback(func(event zk.Event) {
-		fmt.Println("获取到锁了")
-		wg.Done()
-	})
-	conn, _, err := zk.Connect(n.ZkList, time.Second*10, option)
-	if err != nil {
-		return false, fmt.Errorf("等待锁时，开启监听失败,err:%v", err)
-	}
-	defer conn.Close()
-	_, _, _, err = conn.ExistsW(fmt.Sprintf("/%s/%s", n.LockPath, last))
-	if err != nil {
-		return false, fmt.Errorf("等待锁时，获取节点状态失败,err:%v", err)
-	}
-	wg.Wait()
-	return true, nil
+	lockResolvers[proto] = resolver
+	return nil
 }
