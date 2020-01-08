@@ -2,28 +2,26 @@ package lock
 
 import "fmt"
 
-const EPHEMERAL_SEQUENTIAL = 3
-
 var lockResolvers map[string]LockResolver
 
-type LockServer interface {
+type ZkLockServer interface {
 	TryLock() (bool, error)
 	Lock() (bool, error)
-	WaitLock(last string) (bool, error)
-	UnLock()
+	WaitLock(key string) (bool, error)
+	UnLock() error
 }
 
 //根据名称获取锁对象
-func GetLockServer(proto string, opts ...Option) (LockServer, error) {
+func GetLockServer(proto string, opts ...Option) (ZkLockServer, error) {
 	resolver, ok := lockResolvers[proto]
 	if !ok {
 		fmt.Errorf("没有适配器")
 	}
-	return resolver.Resolve(opts...), nil
+	return resolver.Resolve(opts...)
 }
 
 type LockResolver interface {
-	Resolve(opts ...Option) LockServer
+	Resolve(opts ...Option) (ZkLockServer, error)
 }
 
 func RegisteLockResolver(proto string, resolver LockResolver) error {

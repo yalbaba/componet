@@ -2,39 +2,42 @@ package zkLock
 
 import (
 	"fmt"
-	"github.com/samuel/go-zookeeper/zk"
 	"sort"
 	"sync"
 	"time"
 	"zklock/lock"
 	"zklock/util"
+
+	"github.com/samuel/go-zookeeper/zk"
 )
 
+const EPHEMERAL_SEQUENTIAL = 3
+
 type ZkLock struct {
-	ZkList   []string
+	Paths    []string
 	LockPath string
 	c        *zk.Conn
 }
 
-func NewLock(opt ...lock.Option) *ZkLock {
+func NewLock(opt ...lock.Option) (*ZkLock, error) {
 	optConf := &lock.Options{}
 	for _, o := range opt {
 		o(optConf)
 	}
 	lock := &ZkLock{
-		ZkList:   optConf.ZkList,
+		Paths:    optConf.Paths,
 		LockPath: optConf.LockPath,
 	}
 	if lock.LockPath == "" {
 		lock.LockPath = "/my_lock"
 	}
 
-	conn, _, err := zk.Connect(lock.ZkList, 10*time.Second)
+	conn, _, err := zk.Connect(lock.Paths, 10*time.Second)
 	if err != nil {
-		fmt.Errorf("连接错误%v", err)
+		return nil, fmt.Errorf("连接错误%v", err)
 	}
 	lock.c = conn
-	return lock
+	return lock, nil
 }
 
 func (n *ZkLock) TryLock() (bool, error) {
@@ -86,11 +89,12 @@ func (n *ZkLock) WaitLock(last string) (bool, error) {
 		fmt.Println("获取到锁了")
 		wg.Done()
 	})
-	conn, _, err := zk.Connect(n.ZkList, time.Second*10, option)
+	conn, _, err := zk.Connect(n.Paths, time.Second*10, option)
 	if err != nil {
 		return false, fmt.Errorf("等待锁时，开启监听失败,err:%v", err)
 	}
 	defer conn.Close()
+	// 监听上一个节点的状态
 	_, _, _, err = conn.ExistsW(fmt.Sprintf("/%s/%s", n.LockPath, last))
 	if err != nil {
 		return false, fmt.Errorf("等待锁时，获取节点状态失败,err:%v", err)
@@ -99,14 +103,15 @@ func (n *ZkLock) WaitLock(last string) (bool, error) {
 	return true, nil
 }
 
-func (n *ZkLock) UnLock() {
+func (n *ZkLock) UnLock() error {
 	n.c.Close()
+	return nil
 }
 
 type ZkLockResolver struct {
 }
 
-func (n *ZkLockResolver) Resolve(opts ...lock.Option) lock.LockServer {
+func (n *ZkLockResolver) Resolve(opts ...lock.Option) (lock.ZkLockServer, error) {
 	return NewLock(opts...)
 }
 
