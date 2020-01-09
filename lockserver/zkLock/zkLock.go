@@ -82,7 +82,7 @@ func (n *ZkLock) Lock() (bool, error) {
 }
 
 //等待锁
-func (n *ZkLock) WaitLock(last string) (bool, error) {
+func (n *ZkLock) WaitLock(key string) (bool, error) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	option := zk.WithEventCallback(func(event zk.Event) {
@@ -95,7 +95,7 @@ func (n *ZkLock) WaitLock(last string) (bool, error) {
 	}
 	defer conn.Close()
 	// 监听上一个节点的状态
-	_, _, _, err = conn.ExistsW(fmt.Sprintf("/%s/%s", n.LockPath, last))
+	_, _, _, err = conn.ExistsW(fmt.Sprintf("/%s/%s", n.LockPath, key))
 	if err != nil {
 		return false, fmt.Errorf("等待锁时，获取节点状态失败,err:%v", err)
 	}
@@ -103,6 +103,7 @@ func (n *ZkLock) WaitLock(last string) (bool, error) {
 	return true, nil
 }
 
+// 释放锁
 func (n *ZkLock) UnLock() error {
 	n.c.Close()
 	return nil
@@ -111,7 +112,7 @@ func (n *ZkLock) UnLock() error {
 type ZkLockResolver struct {
 }
 
-func (n *ZkLockResolver) Resolve(opts ...lock.Option) (lock.ZkLockServer, error) {
+func (n *ZkLockResolver) Resolve(opts ...lock.Option) (lock.LockServer, error) {
 	return NewLock(opts...)
 }
 

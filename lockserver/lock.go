@@ -4,7 +4,7 @@ import "fmt"
 
 var lockResolvers map[string]LockResolver
 
-type ZkLockServer interface {
+type LockServer interface {
 	TryLock() (bool, error)
 	Lock() (bool, error)
 	WaitLock(key string) (bool, error)
@@ -12,7 +12,7 @@ type ZkLockServer interface {
 }
 
 //根据名称获取锁对象
-func GetLockServer(proto string, opts ...Option) (ZkLockServer, error) {
+func GetLockServer(proto string, opts ...Option) (LockServer, error) {
 	resolver, ok := lockResolvers[proto]
 	if !ok {
 		fmt.Errorf("没有适配器")
@@ -21,7 +21,7 @@ func GetLockServer(proto string, opts ...Option) (ZkLockServer, error) {
 }
 
 type LockResolver interface {
-	Resolve(opts ...Option) (ZkLockServer, error)
+	Resolve(opts ...Option) (LockServer, error)
 }
 
 func RegisteLockResolver(proto string, resolver LockResolver) error {
