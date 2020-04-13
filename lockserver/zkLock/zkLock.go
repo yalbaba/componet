@@ -2,13 +2,12 @@ package zkLock
 
 import (
 	"fmt"
+	"github.com/samuel/go-zookeeper/zk"
 	"sort"
 	"sync"
 	"time"
-	"zklock/lock"
+	"zklock/lockserver"
 	"zklock/util"
-
-	"github.com/samuel/go-zookeeper/zk"
 )
 
 const EPHEMERAL_SEQUENTIAL = 3
@@ -19,8 +18,8 @@ type ZkLock struct {
 	c        *zk.Conn
 }
 
-func NewLock(opt ...lock.Option) (*ZkLock, error) {
-	optConf := &lock.Options{}
+func NewLock(opt ...lockserver.Option) (*ZkLock, error) {
+	optConf := &lockserver.Options{}
 	for _, o := range opt {
 		o(optConf)
 	}
@@ -112,10 +111,10 @@ func (n *ZkLock) UnLock() error {
 type ZkLockResolver struct {
 }
 
-func (n *ZkLockResolver) Resolve(opts ...lock.Option) (lock.LockServer, error) {
+func (n *ZkLockResolver) Resolve(opts ...lockserver.Option) (lockserver.LockServer, error) {
 	return NewLock(opts...)
 }
 
 func init() {
-	lock.RegisteLockResolver("zookeeper", &ZkLockResolver{})
+	lockserver.RegisteLockResolver("zookeeper", &ZkLockResolver{})
 }

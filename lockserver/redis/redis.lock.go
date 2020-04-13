@@ -4,17 +4,17 @@ import (
 	"github.com/go-redis/redis"
 	"github.com/gofrs/uuid"
 	"time"
-	"zklock/lock"
+	"zklock/lockserver"
 )
 
 type RedisLock struct {
 	request string
 	ch      chan int
 	client  *redis.Client
-	OptConf *lock.Options
+	OptConf *lockserver.Options
 }
 
-func NewLock(opts ...lock.Option) (*RedisLock, error) {
+func NewLock(opts ...lockserver.Option) (*RedisLock, error) {
 	// 使用uuid
 	uuID, err := uuid.NewV4()
 	if err != nil {
@@ -86,6 +86,7 @@ func (l *RedisLock) UnLock() error {
 	}
 	//判断本次请求value是否等于当前锁的request
 	if val != l.request {
+		// 此处也存在安全问题，例如程序刚执行到这里过期了，接下来删除的还是其他进程的锁
 		l.client.Del(l.OptConf.LockPath)
 		l.client.Close()
 	}
@@ -94,10 +95,10 @@ func (l *RedisLock) UnLock() error {
 
 type RedisLockResolver struct{}
 
-func (n *RedisLockResolver) Resolve(opts ...lock.Option) (lock.LockServer, error) {
+func (n *RedisLockResolver) Resolve(opts ...lockserver.Option) (lockserver.LockServer, error) {
 	return NewLock(opts...)
 }
 
 func init() {
-	lock.RegisteLockResolver("redis", &RedisLockResolver{})
+	lockserver.RegisteLockResolver("redis", &RedisLockResolver{})
 }
